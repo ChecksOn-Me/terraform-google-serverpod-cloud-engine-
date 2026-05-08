@@ -186,3 +186,9 @@ variable "enable_iptables" {
   type        = bool
   default     = true
 }
+
+variable "security_policy_name" {
+  description = "Optional Cloud Armor security policy name to attach to the API backend service."
+  type        = string
+  default     = ""
+}

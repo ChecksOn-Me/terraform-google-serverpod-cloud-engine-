@@ -129,6 +129,8 @@ resource "google_compute_backend_service" "api" {
   health_checks = [google_compute_health_check.serverpod-balancer.id]
 
   port_name = "api"
+
+  security_policy = var.security_policy_name != "" ? "https://www.googleapis.com/compute/v1/projects/${var.project}/global/securityPolicies/${var.security_policy_name}" : null
 }
 
 resource "google_compute_backend_service" "insights" {
