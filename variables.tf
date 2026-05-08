@@ -166,3 +166,23 @@ variable "storage_bucket_class" {
   type        = string
   default     = "STANDARD"
 }
+
+### Startup script overrides for Container-Optimized OS compatibility
+
+variable "startup_script_override" {
+  description = "Override the startup script entirely. If empty, the default script is used."
+  type        = string
+  default     = ""
+}
+
+variable "docker_network_mode" {
+  description = "Docker network mode for the container. 'host' is required for GCE health checks on localhost:8080."
+  type        = string
+  default     = "host"
+}
+
+variable "enable_iptables" {
+  description = "Whether to add an iptables rule to allow port 8080. Required when using --net host on Container-Optimized OS."
+  type        = bool
+  default     = true
+}
