@@ -11,13 +11,48 @@ resource "google_compute_instance_template" "serverpod" {
   }
 
   # Startup script that runs the Serverpod Docker container.
-  metadata_startup_script = <<-EOF
+  metadata_startup_script = var.startup_script_override != "" ? var.startup_script_override : <<-EOF
       #!/bin/bash
-      useradd serverpod-user
-      usermod -aG docker serverpod-user
-      cd /home/serverpod-user
-      sudo -u serverpod-user docker-credential-gcr configure-docker --registries ${var.region}-docker.pkg.dev
-      sudo -u serverpod-user docker run -p 8080-8082:8080-8082 -e runmode=${var.runmode} -e serverid=$(hostname) ${var.region}-docker.pkg.dev/${var.project}/serverpod-${var.runmode}-container/serverpod:latest
+      set -euo pipefail
+
+      for i in {1..30}; do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 2
+      done
+
+      # Ensure serverpod-user exists (backward compatibility)
+      useradd serverpod-user 2>/dev/null || true
+      usermod -aG docker serverpod-user 2>/dev/null || true
+
+      # Clean up any existing container before starting a new one.
+      docker rm -f serverpod-${var.runmode} >/dev/null 2>&1 || true
+
+      # Configure Docker credential helper for Artifact Registry.
+      # On Container-Optimized OS, the root filesystem is read-only,
+      # so we use /tmp for the Docker configuration directory.
+      mkdir -p /tmp/.docker
+      export DOCKER_CONFIG=/tmp/.docker
+      docker-credential-gcr configure-docker --registries ${var.region}-docker.pkg.dev
+
+      # Open the host firewall for GCE health-check probes.
+      # When using --net host, Docker does not manage iptables automatically.
+      if [ "${var.enable_iptables}" = "true" ]; then
+        if ! iptables -C INPUT -p tcp --dport 8080 -j ACCEPT >/dev/null 2>&1; then
+          iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+        fi
+      fi
+
+      # Run the Serverpod container.  --net host is required so that GCE
+      # health checks (which probe localhost:8080) can reach the application.
+      docker run -d \
+        --restart always \
+        --net ${var.docker_network_mode} \
+        -e runmode=${var.runmode} \
+        -e serverid=$(hostname) \
+        --name serverpod-${var.runmode} \
+        ${var.region}-docker.pkg.dev/${var.project}/serverpod-${var.runmode}-container/serverpod:latest
     EOF
 
   network_interface {
